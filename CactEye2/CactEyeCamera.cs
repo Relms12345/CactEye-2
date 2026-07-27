@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using static CactEye2.InitialSetup;
@@ -49,10 +49,10 @@ namespace CactEye2
 //            CameraWidth = (int)(Screen.width*0.4f);
 //            CameraHeight = (int)(Screen.height*0.4f);
 
-            ScopeRenderTexture = new RenderTexture(CameraWidth, CameraHeight, 24);
+            ScopeRenderTexture = new RenderTexture(CameraWidth, CameraHeight, 24, RenderTextureFormat.ARGB32);
             ScopeRenderTexture.Create();
 
-            FullResolutionTexture = new RenderTexture(Screen.width, Screen.height, 24);
+            FullResolutionTexture = new RenderTexture(Screen.width, Screen.height, 24, RenderTextureFormat.ARGB32);
             FullResolutionTexture.Create();
 
             ScopeTexture2D = new Texture2D(CameraWidth, CameraHeight);
@@ -206,6 +206,120 @@ namespace CactEye2
             return null;
         }
         
+
+        private Type GetDeferredForwardCompatibilityType()
+        {
+            try
+            {
+                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    Type type = assembly.GetType("Deferred.ForwardRenderingCompatibility", false);
+                    if (type != null)
+                    {
+                        return type;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (HighLogic.CurrentGame.Parameters.CustomParams<CactiSettings>().DebugMode)
+                {
+                    Log.Info("Deferred compatibility detection failed: " + ex.Message);
+                }
+            }
+
+            return null;
+        }
+
+        private Component EnsureDeferredComponent(Camera cam, string typeName)
+        {
+            if (cam == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    Type type = assembly.GetType(typeName, false);
+                    if (type == null)
+                    {
+                        continue;
+                    }
+
+                    Component component = cam.gameObject.GetComponent(type);
+                    if (component == null)
+                    {
+                        component = cam.gameObject.AddComponent(type);
+                    }
+
+                    return component;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (HighLogic.CurrentGame.Parameters.CustomParams<CactiSettings>().DebugMode)
+                {
+                    Log.Info("Deferred component setup failed for " + typeName + " on " + cam.name + ": " + ex.Message);
+                }
+            }
+
+            return null;
+        }
+
+        private void TrySetupDeferredCompatibility(Camera cam, string sourceName)
+        {
+            if (cam == null)
+            {
+                return;
+            }
+
+            Type compatType = GetDeferredForwardCompatibilityType();
+            if (compatType == null)
+            {
+                return;
+            }
+
+            try
+            {
+                cam.renderingPath = RenderingPath.DeferredShading;
+                cam.depthTextureMode |= DepthTextureMode.Depth;
+                cam.allowHDR = true;
+
+                Component compat = cam.gameObject.GetComponent(compatType);
+                if (compat == null)
+                {
+                    compat = cam.gameObject.AddComponent(compatType);
+
+                    // Deferred uses layer 10 for scaled-space compatibility and 15 for local-space.
+                    // GalaxyCamera behaves more like a scaled/background camera for this purpose.
+                    int layer = (sourceName == "Camera ScaledSpace" || sourceName == "GalaxyCamera") ? 10 : 15;
+                    compatType.GetMethod("Init")?.Invoke(compat, new object[] { layer });
+                }
+
+                // Mirror the extra camera-side scripts Deferred attaches to the real KSP cameras.
+                // Without these, cloned scaled-space cameras can render planets as flat/untextured
+                // because Deferred's planet fade/compositing and legacy ambient globals are not refreshed.
+                EnsureDeferredComponent(cam, "Deferred.RefreshLegacyAmbient");
+
+                if (sourceName == "Camera ScaledSpace")
+                {
+                    EnsureDeferredComponent(cam, "Deferred.DeferredPQSFade");
+                    EnsureDeferredComponent(cam, "Deferred.DisableCameraReflectionProbe");
+                }
+
+                if (HighLogic.CurrentGame.Parameters.CustomParams<CactiSettings>().DebugMode)
+                {
+                    Log.Info("Enabled Deferred compatibility on " + cam.name);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Info("Deferred compatibility setup failed on " + cam.name + ": " + ex.Message);
+            }
+        }
+
         /*
          * Function name: CameraSetup
          * Purpose: This will make a copy of the specified camera. Taken from
@@ -243,6 +357,8 @@ namespace CactEye2
                 newCam.CopyFrom(GetCameraByName(SourceName));
                 newCam.enabled = true;
                 newCam.targetTexture = ScopeRenderTexture;
+
+                TrySetupDeferredCompatibility(newCam, SourceName);
 
 
                 if (SourceName != "GalaxyCamera" && SourceName != "Camera ScaledSpace")
