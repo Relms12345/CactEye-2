@@ -23,13 +23,14 @@ rem    but not always
 rem LICENSE is the license file
 rem README is the readme file
 
+set H=C:\Users\relms\Desktop\Clean
 set GAMEDIR=CactEye
 set GAMEDATA="GameData\"
-set VERSIONFILE=CactEyeTelescopes.version
-set LICENSE=License.txt
-set README=ReadMe.md
+set VERSIONFILE=CactEyeCommunityRefocused.version
+set LICENSE=LICENSE.md
+set README=README.md
 
-set RELEASEDIR=d:\Users\jbb\release
+set RELEASEDIR=c:\Users\relms\release
 set ZIP="c:\Program Files\7-zip\7z.exe"
 
 rem Copy files to GameData locations
@@ -45,16 +46,16 @@ rem Get Version info
 copy %VERSIONFILE% tmp.version
 set VERSIONFILE=tmp.version
 rem The following requires the JQ program, available here: https://stedolan.github.io/jq/download/
-c:\local\jq-win64  ".VERSION.MAJOR" %VERSIONFILE% >tmpfile
+C:\Users\relms\jq-windows-amd64.exe  ".VERSION.MAJOR" %VERSIONFILE% >tmpfile
 set /P major=<tmpfile
 
-c:\local\jq-win64  ".VERSION.MINOR"  %VERSIONFILE% >tmpfile
+C:\Users\relms\jq-windows-amd64.exe  ".VERSION.MINOR"  %VERSIONFILE% >tmpfile
 set /P minor=<tmpfile
 
-c:\local\jq-win64  ".VERSION.PATCH"  %VERSIONFILE% >tmpfile
+C:\Users\relms\jq-windows-amd64.exe  ".VERSION.PATCH"  %VERSIONFILE% >tmpfile
 set /P patch=<tmpfile
 
-c:\local\jq-win64  ".VERSION.BUILD"  %VERSIONFILE% >tmpfile
+C:\Users\relms\jq-windows-amd64.exe  ".VERSION.BUILD"  %VERSIONFILE% >tmpfile
 set /P build=<tmpfile
 del tmpfile
 del tmp.version
